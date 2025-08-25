@@ -1,0 +1,13 @@
+.python-version
+.venv/
+.env
+
+# Test artifacts (should not be committed)
+/test-data/
+
+# Build artifacts
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/

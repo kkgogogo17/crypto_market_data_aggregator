@@ -1,0 +1,1 @@
+# Test package for crypto market data aggregator

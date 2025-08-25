@@ -1,0 +1,17 @@
+[tools]
+python = "3.11"
+uv = "latest"
+
+[env]
+VIRTUAL_ENV = ".venv"
+_.file = { path = ".env", redact = true }
+
+[tasks]
+build = "uv sync"
+install-test = "uv sync --extra test"
+activate = "source .venv/bin/activate"
+run = "uv run python src/main.py"
+test = "uv run pytest tests/ -v"
+test-cov = "uv run pytest tests/ -v --cov=src --cov-report=html"
+lint = "uv run ruff check src/ tests/"
+format = "uv run ruff format src/ tests/"
