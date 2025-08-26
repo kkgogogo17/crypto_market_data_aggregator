@@ -1,4 +1,5 @@
 """Pytest configuration and fixtures"""
+
 import pytest
 import tempfile
 import shutil
@@ -19,14 +20,14 @@ def temp_data_dir():
 def mock_env_vars():
     """Mock environment variables for testing"""
     env_vars = {
-        'TIINGO_TOKEN': 'test_token_12345',
-        'LOCAL_DATA_DIR': './test-data',  # Use test-data directory
-        'R2_ENDPOINT_URL': 'https://test.r2.cloudflarestorage.com',
-        'R2_ACCESS_KEY_ID': 'test_access_key',
-        'R2_SECRET_ACCESS_KEY': 'test_secret_key',
-        'R2_BUCKET_NAME': 'test-crypto-bucket'
+        "TIINGO_TOKEN": "test_token_12345",
+        "LOCAL_DATA_DIR": "./test-data",  # Use test-data directory
+        "R2_ENDPOINT_URL": "https://test.r2.cloudflarestorage.com",
+        "R2_ACCESS_KEY_ID": "test_access_key",
+        "R2_SECRET_ACCESS_KEY": "test_secret_key",
+        "R2_BUCKET_NAME": "test-crypto-bucket",
     }
-    
+
     with patch.dict(os.environ, env_vars):
         yield env_vars
 
@@ -38,8 +39,8 @@ def cleanup_test_directories():
     # Clean up test-data directory after all tests
     import shutil
     from pathlib import Path
-    
-    test_data_dir = Path('./test-data')
+
+    test_data_dir = Path("./test-data")
     if test_data_dir.exists():
         shutil.rmtree(test_data_dir)
         print("Cleaned up test-data directory")
@@ -62,7 +63,7 @@ def sample_api_response():
                     "close": 45050.0,
                     "volume": 100.5,
                     "volumeNotional": 4520000.0,
-                    "tradesDone": 150
+                    "tradesDone": 150,
                 },
                 {
                     "date": "2024-01-01T00:01:00.000Z",
@@ -72,9 +73,9 @@ def sample_api_response():
                     "close": 45060.0,
                     "volume": 50.25,
                     "volumeNotional": 2263000.0,
-                    "tradesDone": 75
-                }
-            ]
+                    "tradesDone": 75,
+                },
+            ],
         }
     ]
 
@@ -85,9 +86,9 @@ def empty_api_response():
     return [
         {
             "ticker": "BTCUSD",
-            "baseCurrency": "BTC", 
+            "baseCurrency": "BTC",
             "quoteCurrency": "USD",
-            "priceData": []
+            "priceData": [],
         }
     ]
 
@@ -95,7 +96,4 @@ def empty_api_response():
 @pytest.fixture
 def error_api_response():
     """Error API response for testing error handling"""
-    return {
-        "error": "API request failed: 404 Not Found",
-        "status_code": 404
-    }
+    return {"error": "API request failed: 404 Not Found", "status_code": 404}
