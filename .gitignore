@@ -4,6 +4,7 @@
 
 # Test artifacts (should not be committed)
 /test-data/
+local_data/
 data/
 
 # Build artifacts
