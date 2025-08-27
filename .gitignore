@@ -4,6 +4,7 @@
 
 # Test artifacts (should not be committed)
 /test-data/
+data/
 
 # Build artifacts
 *.egg-info/

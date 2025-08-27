@@ -1,0 +1,39 @@
+services:
+  aggregator:
+    build: .
+    container_name: crypto_aggregator
+    volumes:
+      # Production: persistent data on the host VM
+      - ~/data:/app/data
+    environment:
+      # Set the persistent SQLite DB path
+      SQLITE_DB_PATH: /app/data/crypto_aggregator_SQLlite.db
+    restart: unless-stopped
+
+  local:
+    build: .
+    container_name: crypto_aggregator_local
+    volumes:
+      # Development: use a temporary in-container directory
+      - ./local_data:/app/data
+    environment:
+      # Local SQLite DB path (auto-creates/fresh every run)
+      SQLITE_DB_PATH: /app/data/dev_sqlite.db
+    # Uncomment to run interactively if needed
+    # tty: true
+    # stdin_open: true
+
+  test:
+    build: .
+    container_name: crypto_aggregator_test
+    volumes:
+      # Testing: ephemeral data
+      - ./test_data:/app/data
+    environment:
+      # Test DB path (auto-creates/fresh every run)
+      SQLITE_DB_PATH: /app/data/test_sqlite.db
+      # You can add other ENV VARS used in tests
+      TESTING: "true"
+    # Command override for test runs
+    command: ["pytest", "tests/"]
+    # Remove 'restart' so tests stop at the end
