@@ -1,5 +1,5 @@
 services:
-  aggregator:
+  app:
     build: .
     container_name: crypto_aggregator
     volumes:
@@ -28,7 +28,7 @@ services:
     container_name: crypto_aggregator_test
     volumes:
       # Testing: ephemeral data
-      - ./test_data:/app/data
+      - test_data_vol:/app/data
     environment:
       # Test DB path (auto-creates/fresh every run)
       SQLITE_DB_PATH: /app/data/test_sqlite.db
@@ -37,3 +37,7 @@ services:
     # Command override for test runs
     command: ["pytest", "tests/"]
     # Remove 'restart' so tests stop at the end
+
+volumes:
+  test_data_vol:
+    driver: local

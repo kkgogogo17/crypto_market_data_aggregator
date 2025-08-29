@@ -34,16 +34,29 @@ def mock_env_vars():
 
 @pytest.fixture(autouse=True, scope="session")
 def cleanup_test_directories():
-    """Clean up test directories after all tests complete"""
-    yield
-    # Clean up test-data directory after all tests
-    import shutil
-    from pathlib import Path
-
+    """Clean up test directories before and after all tests"""
+    # Clean up before tests start
     test_data_dir = Path("./test-data")
     if test_data_dir.exists():
-        shutil.rmtree(test_data_dir)
-        print("Cleaned up test-data directory")
+        print(f"Pre-cleanup: removing existing test-data directory")
+        try:
+            shutil.rmtree(test_data_dir)
+            print("Pre-cleanup: removed test-data directory")
+        except Exception as e:
+            print(f"Pre-cleanup failed: {e}")
+    
+    yield
+    
+    # Clean up after all tests complete
+    if test_data_dir.exists():
+        print(f"Post-cleanup: found test-data directory")
+        try:
+            shutil.rmtree(test_data_dir)
+            print("Post-cleanup: removed test-data directory")
+        except Exception as e:
+            print(f"Post-cleanup failed: {e}")
+    else:
+        print(f"Post-cleanup: no test-data directory found")
 
 
 @pytest.fixture
