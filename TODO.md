@@ -6,16 +6,18 @@ Transform the current daily file-based storage system to a monthly aggregation s
 ## Current State Analysis
 
 ### Existing Structure
-- **Storage Pattern**: `data/YYYY/MM/DD/ticker_YYYYMMDD.parquet` (daily files)
-- **R2 Pattern**: `crypto-data/YYYY/MM/DD/ticker_YYYYMMDD.parquet`
+
+- **Storage Pattern**: `data/YYYY/MM/DD/ticker_YYYYMMDD.parquet` (daily files) ~~[MIGRATED TO MONTHLY]~~
+- **R2 Pattern**: `crypto-data/YYYY/MM/DD/ticker_YYYYMMDD.parquet` ~~[UPDATED TO MONTHLY]~~
 - **Data Source**: Single Tiingo API endpoint
-- **No Exchange Differentiation**: All data treated as single source
-- **No Tracking System**: No persistence of what data has been collected
+- **No Exchange Differentiation**: All data treated as single source ~~[IMPLEMENTED]~~
+- **No Tracking System**: No persistence of what data has been collected ~~[PLANNED]~~
 
 ### Current Components
-- `ParquetStorage` class: Handles local storage and R2 uploads
+
+- `ParquetStorage` class: Handles local storage and R2 uploads ~~[REFACTORED TO MONTHLY]~~
 - `collector.py`: API data fetching functions
-- Daily file generation and upload system
+- Daily file generation and upload system ~~[MIGRATED TO MONTHLY]~~
 
 ## Target Architecture
 
@@ -102,7 +104,8 @@ CREATE TABLE monitored_assets (
 ```
 
 ### 1.2 Monthly Storage System Refactor
-**Files to Modify**: `src/parquet_storage.py`
+
+**Files Modified**: `src/parquet_storage.py`
 
 #### Key Changes:
 1. **New Storage Pattern**: Change from daily to monthly files
