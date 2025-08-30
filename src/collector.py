@@ -3,7 +3,7 @@ from typing import Final, Optional, Dict, Any
 from datetime import datetime
 import requests
 
-from src.parquet_storage import save_crypto_data_to_parquet
+from src.parquet_storage import ParquetStorage
 
 
 def get_crypto_historical_data(
@@ -130,11 +130,12 @@ def fetch_crypto_data_endpoint(
 
 def fetch_and_save_crypto_data(
     ticker: str,
+    exchange: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     specific_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Fetch crypto data from API and save to Parquet file"""
+    """Fetch crypto data from API and save to monthly Parquet files"""
 
     # Fetch data from API
     api_result = fetch_crypto_data_endpoint(ticker, start_date, end_date, specific_date)
@@ -146,15 +147,42 @@ def fetch_and_save_crypto_data(
             "storage_result": {"error": "API call failed, save operation skipped"},
         }
 
-    # Determine the date for file organization
-    if specific_date:
-        file_date = specific_date
-    elif start_date:
-        file_date = start_date
-    else:
-        file_date = datetime.now().strftime("%Y-%m-%d")
+    # Extract price data from API response
+    if not (api_result and isinstance(api_result, list) and len(api_result) > 0):
+        return {
+            "api_result": api_result,
+            "storage_result": {"error": "Invalid API response format"},
+        }
+        
+    price_data = api_result[0].get("priceData", [])
+    if not price_data:
+        return {
+            "api_result": api_result,
+            "storage_result": {"error": "No price data found in API response"},
+        }
 
-    # Save to parquet
-    storage_result = save_crypto_data_to_parquet(api_result, ticker, file_date)
+    # Save to monthly parquet using the storage class
+    try:
+        storage = ParquetStorage()
+        storage_result = storage.save_multi_month_data(price_data, ticker, exchange)
+        return {"api_result": api_result, "storage_result": storage_result}
+    except Exception as e:
+        return {
+            "api_result": api_result,
+            "storage_result": {"error": f"Storage failed: {str(e)}"},
+        }
 
-    return {"api_result": api_result, "storage_result": storage_result}
+
+def fetch_historical_range(
+    ticker: str, 
+    exchange: str,
+    start_date: str, 
+    end_date: str
+) -> Dict[str, Any]:
+    """Fetch large date ranges and save to monthly files"""
+    return fetch_and_save_crypto_data(
+        ticker=ticker,
+        exchange=exchange, 
+        start_date=start_date,
+        end_date=end_date
+    )

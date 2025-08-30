@@ -202,9 +202,9 @@ class TestFetchAndSaveCryptoData:
     """Test the combined fetch and save functionality"""
 
     @responses.activate
-    @patch("src.collector.save_crypto_data_to_parquet")
+    @patch("src.collector.ParquetStorage")
     def test_successful_fetch_and_save(
-        self, mock_save, mock_env_vars, sample_api_response
+            self, mock_storage_class, mock_env_vars, sample_api_response
     ):
         """Test successful fetch and save operation"""
         # Mock API response
@@ -215,27 +215,32 @@ class TestFetchAndSaveCryptoData:
             status=200,
         )
 
-        # Mock save function
-        mock_save.return_value = {
+        # Mock ParquetStorage instance and methods
+        mock_storage = mock_storage_class.return_value
+        mock_storage.save_multi_month_data.return_value = {
             "success": True,
-            "records_count": 2,
-            "file_path": "/test/path/BTCUSD_20240101.parquet",
+            "total_records": 2,
+            "months_saved": 1,
+            "files": [{"file_path": "/test/path/BTCUSD_tiingo_202401.parquet"}],
+            "ticker": "BTCUSD",
+            "exchange": "tiingo",
         }
 
-        result = fetch_and_save_crypto_data("BTCUSD", specific_date="2024-01-01")
+        result = fetch_and_save_crypto_data("BTCUSD", "tiingo", specific_date="2024-01-01")
 
         assert "api_result" in result
         assert "storage_result" in result
         assert result["api_result"] == sample_api_response
         assert result["storage_result"]["success"] is True
 
-        # Verify save function was called with correct parameters
-        mock_save.assert_called_once_with(sample_api_response, "BTCUSD", "2024-01-01")
+        # Verify save method was called with correct parameters
+        expected_price_data = sample_api_response[0]["priceData"]
+        mock_storage.save_multi_month_data.assert_called_once_with(expected_price_data, "BTCUSD", "tiingo")
 
-    @patch("src.collector.save_crypto_data_to_parquet")
-    def test_api_error_prevents_save(self, mock_save):
+    @patch("src.collector.ParquetStorage")
+    def test_api_error_prevents_save(self, mock_storage_class):
         """Test that API errors prevent save operations"""
-        result = fetch_and_save_crypto_data("BTCUSD", specific_date="invalid-date")
+        result = fetch_and_save_crypto_data("BTCUSD", "tiingo", specific_date="invalid-date")
 
         # Should return validation error in api_result
         assert "api_result" in result
@@ -247,11 +252,11 @@ class TestFetchAndSaveCryptoData:
         assert "save operation skipped" in result["storage_result"]["error"]
 
         # Save should not be called
-        mock_save.assert_not_called()
+        mock_storage_class.return_value.save_multi_month_data.assert_not_called()
 
     @responses.activate
-    @patch("src.collector.save_crypto_data_to_parquet")
-    def test_save_error_handling(self, mock_save, mock_env_vars, sample_api_response):
+    @patch("src.collector.ParquetStorage")
+    def test_save_error_handling(self, mock_storage_class, mock_env_vars, sample_api_response):
         """Test handling of save errors"""
         # Mock successful API response
         responses.add(
@@ -262,20 +267,21 @@ class TestFetchAndSaveCryptoData:
         )
 
         # Mock save function to return error
-        mock_save.return_value = {
+        mock_storage = mock_storage_class.return_value
+        mock_storage.save_multi_month_data.return_value = {
             "error": "Failed to save parquet file: Permission denied"
         }
 
-        result = fetch_and_save_crypto_data("BTCUSD", specific_date="2024-01-01")
+        result = fetch_and_save_crypto_data("BTCUSD", "tiingo", specific_date="2024-01-01")
 
         assert result["api_result"] == sample_api_response
         assert "error" in result["storage_result"]
         assert "Permission denied" in result["storage_result"]["error"]
 
     @responses.activate
-    @patch("src.collector.save_crypto_data_to_parquet")
+    @patch("src.collector.ParquetStorage")
     def test_date_determination_logic(
-        self, mock_save, mock_env_vars, sample_api_response
+            self, mock_storage_class, mock_env_vars, sample_api_response
     ):
         """Test the logic for determining file date"""
         responses.add(
@@ -285,27 +291,29 @@ class TestFetchAndSaveCryptoData:
             status=200,
         )
 
-        mock_save.return_value = {"success": True}
+        mock_storage = mock_storage_class.return_value
+        mock_storage.save_multi_month_data.return_value = {"success": True}
 
         # Test specific_date takes priority
         fetch_and_save_crypto_data(
-            "BTCUSD",
+            "BTCUSD", "tiingo",
             start_date="2024-01-01",
             end_date="2024-01-02",
             specific_date="2024-01-03",
         )
-        mock_save.assert_called_with(sample_api_response, "BTCUSD", "2024-01-03")
+        mock_storage.save_multi_month_data.assert_called_with(sample_api_response[0]["priceData"], "BTCUSD", "tiingo")
 
         # Test start_date used when no specific_date
-        mock_save.reset_mock()
+        mock_storage.save_multi_month_data.reset_mock()
         fetch_and_save_crypto_data(
-            "BTCUSD", start_date="2024-01-01", end_date="2024-01-02"
+            "BTCUSD", "tiingo", start_date="2024-01-01", end_date="2024-01-02"
         )
-        mock_save.assert_called_with(sample_api_response, "BTCUSD", "2024-01-01")
+        mock_storage.save_multi_month_data.assert_called_with(sample_api_response[0]["priceData"], "BTCUSD", "tiingo")
 
         # Test current date used when no dates provided
-        mock_save.reset_mock()
+        mock_storage.save_multi_month_data.reset_mock()
         with patch("src.collector.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "2024-01-15"
-            fetch_and_save_crypto_data("BTCUSD")
-            mock_save.assert_called_with(sample_api_response, "BTCUSD", "2024-01-15")
+            fetch_and_save_crypto_data("BTCUSD", "tiingo")
+            mock_storage.save_multi_month_data.assert_called_with(sample_api_response[0]["priceData"], "BTCUSD",
+                                                                  "tiingo")

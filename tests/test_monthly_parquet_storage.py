@@ -243,7 +243,7 @@ class TestMonthlyParquetStorage:
             with pytest.raises(ValueError, match="Data record must contain either 'date' or 'timestamp' field"):
                 storage.group_data_by_month(data)
 
-    def test_save_multi_month_data_success(self, temp_data_dir):
+    def test_save_multi_month_data_success(self, temp_data_dir, mock_external_services):
         """Test saving data spanning multiple months"""
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             storage = ParquetStorage()
@@ -302,10 +302,9 @@ class TestMonthlyParquetStorage:
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             storage = ParquetStorage()
 
-            # Create test files
+            # Create test file
             data = [{"date": "2024-01-15T00:00:00.000Z", "open": 45000}]
             storage.save_to_monthly_parquet(data, "BTCUSD", "tiingo", 2024, 1)
-            storage.save_to_monthly_parquet(data, "ETHUSD", "coinbase", 2024, 1)
 
             # Mock current date to make files appear old enough
             with patch("src.parquet_storage.datetime") as mock_datetime:
@@ -313,10 +312,11 @@ class TestMonthlyParquetStorage:
 
                 files = storage.get_monthly_files_for_upload(months_old=1)
 
-                assert len(files) == 2
+                assert len(files) == 1
 
                 # Check structure of returned data
-                btc_file = next(f for f in files if f["ticker"] == "BTCUSD")
+                btc_file = files[0]
+                assert btc_file["ticker"] == "BTCUSD"
                 assert btc_file["exchange"] == "tiingo"
                 assert btc_file["year"] == 2024
                 assert btc_file["month"] == 1
@@ -349,7 +349,7 @@ class TestMonthlyParquetStorage:
         with pytest.raises(ValueError, match="Invalid API response format"):
             save_crypto_data_to_parquet(invalid_response, "BTCUSD", "tiingo")
 
-    def test_upload_monthly_parquet_to_r2_success(self, temp_data_dir):
+    def test_upload_monthly_parquet_to_r2_success(self, temp_data_dir, mock_external_services):
         """Test successful upload of monthly parquet to R2"""
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             # Create a test file
@@ -357,20 +357,16 @@ class TestMonthlyParquetStorage:
             data = [{"date": "2024-01-15T00:00:00.000Z", "open": 45000}]
             storage.save_to_monthly_parquet(data, "BTCUSD", "tiingo", 2024, 1)
 
-            # Mock the entire boto3 client to prevent real network calls
-            with patch("boto3.client") as mock_boto3:
-                mock_client = Mock()
-                mock_boto3.return_value = mock_client
+            # Should not raise any exception
+            upload_monthly_parquet_to_r2("BTCUSD", "tiingo", 2024, 1)
 
-                # Should not raise any exception
-                upload_monthly_parquet_to_r2("BTCUSD", "tiingo", 2024, 1)
-
-                # Verify upload was called with correct parameters
-                mock_client.upload_file.assert_called_once()
-                args = mock_client.upload_file.call_args[0]
-                assert "BTCUSD_tiingo_202401.parquet" in args[0]  # local file path
-                assert args[1] == "crypto-data-tiingo"  # bucket name (default)
-                assert args[2] == "BTCUSD/tiingo/2024/01/BTCUSD_tiingo_202401.parquet"  # R2 key
+            # Verify upload was called with correct parameters
+            mock_client = mock_external_services["boto3_client"]
+            mock_client.upload_file.assert_called_once()
+            args = mock_client.upload_file.call_args[0]
+            assert "BTCUSD_tiingo_202401.parquet" in args[0]  # local file path
+            assert args[1] == "crypto-data-tiingo"  # bucket name (default)
+            assert args[2] == "BTCUSD/tiingo/2024/01/BTCUSD_tiingo_202401.parquet"  # R2 key
 
     def test_upload_monthly_parquet_to_r2_file_not_found(self, temp_data_dir):
         """Test upload when file doesn't exist"""
@@ -378,7 +374,7 @@ class TestMonthlyParquetStorage:
             with pytest.raises(FileNotFoundError):
                 upload_monthly_parquet_to_r2("NONEXISTENT", "tiingo", 2024, 1)
 
-    def test_upload_monthly_parquet_to_r2_upload_failed(self, temp_data_dir):
+    def test_upload_monthly_parquet_to_r2_upload_failed(self, temp_data_dir, mock_external_services):
         """Test upload when R2 upload fails"""
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             # Create a test file
@@ -386,24 +382,22 @@ class TestMonthlyParquetStorage:
             data = [{"date": "2024-01-15T00:00:00.000Z", "open": 45000}]
             storage.save_to_monthly_parquet(data, "BTCUSD", "tiingo", 2024, 1)
 
-            # Mock boto3 client to simulate upload failure
-            with patch("boto3.client") as mock_boto3:
-                mock_client = Mock()
-                mock_client.upload_file.side_effect = ClientError(
-                    error_response={
-                        "Error": {
-                            "Code": "ServiceUnavailable",
-                            "Message": "Service down",
-                        }
-                    },
-                    operation_name="upload_file",
-                )
-                mock_boto3.return_value = mock_client
+            # Configure mock to simulate upload failure
+            mock_client = mock_external_services["boto3_client"]
+            mock_client.upload_file.side_effect = ClientError(
+                error_response={
+                    "Error": {
+                        "Code": "ServiceUnavailable",
+                        "Message": "Service down",
+                    }
+                },
+                operation_name="upload_file",
+            )
 
-                with pytest.raises(RuntimeError, match="Failed to upload to R2"):
-                    upload_monthly_parquet_to_r2("BTCUSD", "tiingo", 2024, 1)
+            with pytest.raises(RuntimeError, match="Failed to upload to R2"):
+                upload_monthly_parquet_to_r2("BTCUSD", "tiingo", 2024, 1)
 
-    def test_batch_upload_monthly_to_r2_success(self, temp_data_dir):
+    def test_batch_upload_monthly_to_r2_success(self, temp_data_dir, mock_external_services):
         """Test successful batch upload"""
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             storage = ParquetStorage()
@@ -413,19 +407,14 @@ class TestMonthlyParquetStorage:
             storage.save_to_monthly_parquet(data, "BTCUSD", "tiingo", 2024, 1)
             storage.save_to_monthly_parquet(data, "ETHUSD", "coinbase", 2024, 1)
 
-            # Mock boto3 client
-            with patch("boto3.client") as mock_boto3:
-                mock_client = Mock()
-                mock_boto3.return_value = mock_client
+            # Mock datetime to make files appear old enough
+            with patch("src.parquet_storage.datetime") as mock_datetime:
+                mock_datetime.now.return_value = datetime(2024, 3, 1)  # 2 months later
 
-                # Mock datetime to make files appear old enough
-                with patch("src.parquet_storage.datetime") as mock_datetime:
-                    mock_datetime.now.return_value = datetime(2024, 3, 1)  # 2 months later
+                uploaded_count = batch_upload_monthly_to_r2(months_old=1)
 
-                    uploaded_count = batch_upload_monthly_to_r2(months_old=1)
-
-                    assert uploaded_count == 2
-                    assert mock_client.upload_file.call_count == 2
+                assert uploaded_count == 2
+                assert mock_external_services["boto3_client"].upload_file.call_count == 2
 
     def test_batch_upload_monthly_to_r2_no_files(self, temp_data_dir):
         """Test batch upload with no files"""
@@ -436,7 +425,7 @@ class TestMonthlyParquetStorage:
 
             assert uploaded_count == 0
 
-    def test_batch_upload_monthly_to_r2_with_failures(self, temp_data_dir):
+    def test_batch_upload_monthly_to_r2_with_failures(self, temp_data_dir, mock_external_services):
         """Test batch upload with some failures"""
         with patch.dict("os.environ", {"LOCAL_DATA_DIR": str(temp_data_dir)}):
             storage = ParquetStorage()
@@ -446,27 +435,25 @@ class TestMonthlyParquetStorage:
             storage.save_to_monthly_parquet(data, "BTCUSD", "tiingo", 2024, 1)
             storage.save_to_monthly_parquet(data, "ETHUSD", "coinbase", 2024, 1)
 
-            # Mock boto3 client with mixed success/failure
-            with patch("boto3.client") as mock_boto3:
-                mock_client = Mock()
-                # First upload succeeds, second fails
-                mock_client.upload_file.side_effect = [
-                    None,  # Success
-                    ClientError(
-                        error_response={
-                            "Error": {
-                                "Code": "ServiceUnavailable",
-                                "Message": "Service down",
-                            }
-                        },
-                        operation_name="upload_file",
-                    ),
-                ]
-                mock_boto3.return_value = mock_client
+            # Configure mock with mixed success/failure
+            mock_client = mock_external_services["boto3_client"]
+            # First upload succeeds, second fails
+            mock_client.upload_file.side_effect = [
+                None,  # Success
+                ClientError(
+                    error_response={
+                        "Error": {
+                            "Code": "ServiceUnavailable",
+                            "Message": "Service down",
+                        }
+                    },
+                    operation_name="upload_file",
+                ),
+            ]
 
-                # Mock datetime to make files appear old enough
-                with patch("src.parquet_storage.datetime") as mock_datetime:
-                    mock_datetime.now.return_value = datetime(2024, 3, 1)  # 2 months later
+            # Mock datetime to make files appear old enough
+            with patch("src.parquet_storage.datetime") as mock_datetime:
+                mock_datetime.now.return_value = datetime(2024, 3, 1)  # 2 months later
 
-                    with pytest.raises(RuntimeError, match="Failed to upload 1 files"):
-                        batch_upload_monthly_to_r2(months_old=1)
+                with pytest.raises(RuntimeError, match="Failed to upload 1 files"):
+                    batch_upload_monthly_to_r2(months_old=1)

@@ -4,8 +4,45 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import os
+
+
+@pytest.fixture(autouse=True)
+def mock_external_services():
+    """Automatically mock external services for all tests"""
+    # Mock boto3 to prevent real R2 connections
+    with patch("boto3.client") as mock_boto3:
+        mock_s3_client = Mock()
+        mock_boto3.return_value = mock_s3_client
+
+        # Mock DataCollectionDB to prevent real database operations
+        with patch("src.parquet_storage.DataCollectionDB") as mock_db_class:
+            mock_db = Mock()
+            mock_db_class.return_value = mock_db
+
+            # Mock database init function to prevent file creation
+            with patch("src.database.init_db") as mock_init_db:
+                mock_init_db.return_value = None
+
+                # Mock sqlite3.connect to prevent any database connections
+                with patch("sqlite3.connect") as mock_sqlite_connect:
+                    mock_conn = Mock()
+                    mock_cursor = Mock()
+                    mock_conn.cursor.return_value = mock_cursor
+                    mock_sqlite_connect.return_value = mock_conn
+
+                    # Mock the R2 upload methods to prevent actual uploads
+                    with patch("src.parquet_storage.ParquetStorage.upload_to_r2_with_retry") as mock_upload:
+                        mock_upload.return_value = {"success": True, "message": "Mocked upload"}
+
+                        yield {
+                            "boto3_client": mock_s3_client,
+                            "db": mock_db,
+                            "upload_retry": mock_upload,
+                            "sqlite_connect": mock_sqlite_connect,
+                            "init_db": mock_init_db
+                        }
 
 
 @pytest.fixture
@@ -34,9 +71,11 @@ def mock_env_vars():
 
 @pytest.fixture(autouse=True, scope="session")
 def cleanup_test_directories():
-    """Clean up test directories before and after all tests"""
+    """Clean up test directories and database files before and after all tests"""
     # Clean up before tests start
     test_data_dir = Path("./test-data")
+    test_db_file = Path("crypto_data.db")
+
     if test_data_dir.exists():
         print(f"Pre-cleanup: removing existing test-data directory")
         try:
@@ -44,7 +83,15 @@ def cleanup_test_directories():
             print("Pre-cleanup: removed test-data directory")
         except Exception as e:
             print(f"Pre-cleanup failed: {e}")
-    
+
+    if test_db_file.exists():
+        print(f"Pre-cleanup: removing existing crypto_data.db")
+        try:
+            test_db_file.unlink()
+            print("Pre-cleanup: removed crypto_data.db")
+        except Exception as e:
+            print(f"Pre-cleanup failed: {e}")
+
     yield
     
     # Clean up after all tests complete
@@ -57,6 +104,16 @@ def cleanup_test_directories():
             print(f"Post-cleanup failed: {e}")
     else:
         print(f"Post-cleanup: no test-data directory found")
+
+    if test_db_file.exists():
+        print(f"Post-cleanup: found crypto_data.db")
+        try:
+            test_db_file.unlink()
+            print("Post-cleanup: removed crypto_data.db")
+        except Exception as e:
+            print(f"Post-cleanup failed: {e}")
+    else:
+        print(f"Post-cleanup: no crypto_data.db found")
 
 
 @pytest.fixture
